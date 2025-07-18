@@ -1,0 +1,50 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - develop
+  pull_request:
+    branches:
+      - develop
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Log in to Azure ACR
+      uses: azure/docker-login@v1
+      with:
+        login-server: trademinutesacr.azurecr.io
+        username: ${{ secrets.ACR_USERNAME }}
+        password: ${{ secrets.ACR_PASSWORD }}
+
+    - name: Build and push frontend image
+      if: github.ref == 'refs/heads/develop'
+      run: |
+        cd trademinutes-frontend
+        docker build -t trademinutesacr.azurecr.io/frontend:latest .
+        docker push trademinutesacr.azurecr.io/frontend:latest
+
+    - name: Build and push backend image
+      if: github.ref == 'refs/heads/develop'
+      run: |
+        cd ../trademinutes-auth
+        go build -o backend
+        docker build -t trademinutesacr.azurecr.io/backend:latest .
+        docker push trademinutesacr.azurecr.io/backend:latest
+
+    - name: Trigger Terraform Apply
+      run: |
+        cd ../terraform-trademinutes
+        terraform init
+        terraform apply -auto-approve
+      env:
+        ARM_SUBSCRIPTION_ID: "43864a92-f5cf-4568-9abb-06ffd56a0074"
